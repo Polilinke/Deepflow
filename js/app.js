@@ -1,0 +1,629 @@
+// Main application logic: UI wiring, search, embedded player, queue, library, playlists, history.
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const state = {
+    results: [],
+    queue: Store.getQueue(),
+    currentIndex: -1,
+    currentTrack: null,
+    player: null,
+    playerReady: false,
+    pendingVideoId: null,
+    pickerTrack: null,
+    searchTimer: null,
+    lastQuery: ''
+  };
+
+  // ---------- Settings, theme, accent, glass, album background ----------
+  function applySettings() {
+    const s = Store.getSettings();
+    document.documentElement.dataset.theme = s.theme;
+    document.documentElement.dataset.accent = s.accent;
+    $('accentSelect').value = s.accent;
+    document.body.classList.toggle('glass', !!s.glass);
+    const nowPlaying = $('npFull');
+    if (nowPlaying) nowPlaying.classList.toggle('lyrics-glass', !!s.npGlass);
+    updateAlbumBg();
+  }
+
+  function updateAlbumBg() {
+    const s = Store.getSettings();
+    const url = state.currentTrack && state.currentTrack.thumbnail;
+    Background.setArt(s.albumBg ? url : '');
+  }
+
+  $('themeToggle').addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    Store.saveSettings({ theme: next });
+    applySettings();
+  });
+
+  $('accentSelect').addEventListener('change', (e) => {
+    Store.saveSettings({ accent: e.target.value });
+    applySettings();
+  });
+
+  $('fullscreenBtn').addEventListener('click', () => {
+    if (window.desktop) window.desktop.toggleFullscreen();
+  });
+
+  // ---------- Views ----------
+  document.querySelectorAll('.nav-btn[data-view]').forEach(btn => {
+    btn.addEventListener('click', () => showView(btn.dataset.view));
+  });
+
+  function showView(name) {
+    document.querySelectorAll('.nav-btn[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
+    if (name === 'library') renderLibrary();
+    if (name === 'playlists') renderPlaylists();
+    if (name === 'history') renderHistory();
+    if (name === 'queue') renderQueue();
+  }
+
+  // ---------- Shared API status ----------
+  function updateQuotaBadge() {
+    const badge = $('quotaBadge');
+    if (badge) {
+      badge.textContent = 'Shared search';
+      badge.classList.remove('warn', 'out');
+    }
+    $('quotaWarning')?.classList.add('hidden');
+  }
+
+  function showBanner(text, kind) {
+    const b = $('quotaWarning');
+    b.textContent = text;
+    b.className = 'banner' + (kind === 'error' ? ' error' : '');
+  }
+
+  // ---------- Search (Enter only, cached, quota-aware) ----------
+  $('searchInput').addEventListener('input', (e) => {
+    const q = e.target.value.trim();
+    if (!q) {
+      showHome();
+      return;
+    }
+    $('searchStatus').textContent = 'Press Enter to search.';
+  });
+
+  $('searchInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const q = e.target.value.trim();
+      if (q.length < 3) {
+        $('searchStatus').textContent = 'Type at least 3 characters, then press Enter.';
+        return;
+      }
+      runSearch(q, true);
+    }
+  });
+
+  // ---------- Home: popular music (1 quota unit, cached 24 hours) ----------
+  async function showHome() {
+    showView('search');
+    const region = Store.getSettings().popularRegion || 'US';
+    const cacheKey = 'popular:' + region;
+    const cached = Store.getCachedSearch(cacheKey);
+    if (cached) {
+      state.results = cached;
+      $('searchStatus').textContent = 'Popular music right now';
+      renderResults();
+      return;
+    }
+
+    $('searchStatus').textContent = 'Loading popular music…';
+    try {
+      const results = await YouTubeAPI.fetchPopular(region);
+      Store.setCachedSearch(cacheKey, results);
+      state.results = results;
+      $('searchStatus').textContent = 'Popular music right now';
+      renderResults();
+    } catch (err) {
+      $('searchStatus').textContent = 'Could not load popular music: ' + err.message;
+    }
+    updateQuotaBadge();
+  }
+
+  async function runSearch(query, force = false) {
+    if (query === state.lastQuery && !force) return;
+    state.lastQuery = query;
+    showView('search');
+
+    const cached = Store.getCachedSearch(query);
+    if (cached) {
+      state.results = cached;
+      $('searchStatus').textContent = `Showing ${cached.length} cached results for "${query}".`;
+      renderResults();
+      return;
+    }
+
+    $('searchStatus').textContent = `Searching for "${query}"…`;
+    try {
+      const results = await YouTubeAPI.search(query);
+      Store.setCachedSearch(query, results);
+      state.results = results;
+      $('searchStatus').textContent = results.length ? `${results.length} results for "${query}".` : `No results for "${query}".`;
+      renderResults();
+    } catch (err) {
+      if (err instanceof YouTubeAPI.QuotaExhaustedError) {
+        $('searchStatus').textContent = 'YouTube says the quota is used up. Fresh searches will resume after the daily reset.';
+      } else {
+        $('searchStatus').textContent = 'Search failed: ' + err.message;
+      }
+    }
+    updateQuotaBadge();
+  }
+
+  // ---------- Track rendering ----------
+  function trackRow(track, opts = {}) {
+    const row = document.createElement('div');
+    row.className = 'track';
+    if (state.currentTrack && state.currentTrack.id === track.id) row.classList.add('playing');
+
+    const img = document.createElement('img');
+    img.src = track.thumbnail || '';
+    img.alt = '';
+    img.loading = 'lazy';
+
+    const info = document.createElement('div');
+    info.style.minWidth = '0';
+    const t = document.createElement('div');
+    t.className = 'track-title';
+    t.textContent = track.title;
+    t.title = track.title;
+    const a = document.createElement('div');
+    a.className = 'track-artist';
+    a.textContent = track.artist;
+    info.append(t, a);
+
+    const actions = document.createElement('div');
+    actions.className = 'track-actions';
+
+    if (opts.moveable) {
+      const move = document.createElement('div');
+      move.className = 'move-btns';
+      move.append(
+        button('▲', () => opts.moveable(-1), 'btn'),
+        button('▼', () => opts.moveable(1), 'btn')
+      );
+      actions.append(move);
+    }
+
+    actions.append(
+      button('▶ Play', () => playFromList(opts.list || [track], track), 'btn small primary'),
+      button('+ Queue', () => addToQueue(track), 'btn small'),
+      button(Store.isSaved(track.id) ? '★ Saved' : '☆ Save', () => {
+        if (Store.isSaved(track.id)) Store.removeTrack(track.id);
+        else Store.saveTrack(track);
+        refreshCurrent();
+      }, 'btn small'),
+      button('Add to playlist', () => openPicker(track), 'btn small ghost')
+    );
+    if (opts.removable) {
+      actions.append(button('Remove', () => opts.removable(track), 'btn small danger'));
+    }
+
+    row.append(img, info, actions);
+    return row;
+  }
+
+  function button(label, onClick, cls) {
+    const b = document.createElement('button');
+    b.className = cls || 'btn small';
+    b.textContent = label;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function emptyNote(text) {
+    const d = document.createElement('div');
+    d.className = 'empty';
+    d.textContent = text;
+    return d;
+  }
+
+  function renderResults() {
+    const box = $('results');
+    box.replaceChildren();
+    state.results.forEach(track => box.append(trackRow(track, { list: state.results })));
+  }
+
+  function renderLibrary() {
+    const box = $('libraryList');
+    box.replaceChildren();
+    const lib = Store.getLibrary();
+    if (!lib.length) return box.append(emptyNote('No saved tracks yet. Click ☆ Save on any track.'));
+    lib.forEach(track => box.append(trackRow(track, {
+      list: lib,
+      removable: () => { Store.removeTrack(track.id); renderLibrary(); }
+    })));
+  }
+
+  function renderHistory() {
+    const box = $('historyList');
+    box.replaceChildren();
+    const list = Store.getHistory();
+    if (!list.length) return box.append(emptyNote('Nothing played yet.'));
+    list.forEach(track => box.append(trackRow(track, { list })));
+  }
+
+  $('clearHistoryBtn').addEventListener('click', () => {
+    if (confirm('Clear your play history?')) {
+      Store.clearHistory();
+      renderHistory();
+    }
+  });
+
+  function renderPlaylists() {
+    const c = $('playlistsContainer');
+    c.replaceChildren();
+    const pls = Store.getPlaylists();
+    if (!pls.length) return c.append(emptyNote('No playlists yet. Create one above.'));
+
+    pls.forEach(pl => {
+      const card = document.createElement('div');
+      card.className = 'playlist-card';
+
+      const head = document.createElement('div');
+      head.className = 'playlist-head';
+      const h = document.createElement('h3');
+      h.textContent = `${pl.name} (${pl.tracks.length})`;
+      head.append(h);
+
+      const acts = document.createElement('div');
+      acts.className = 'row';
+      acts.append(
+        button('▶ Play all', () => pl.tracks.length && playFromList(pl.tracks, pl.tracks[0]), 'btn small primary'),
+        button('Queue all', () => { pl.tracks.forEach(t => addToQueue(t, true)); renderQueue(); }, 'btn small'),
+        button('Rename', () => {
+          const name = prompt('New name for playlist:', pl.name);
+          if (name && name.trim()) { Store.renamePlaylist(pl.id, name); renderPlaylists(); }
+        }, 'btn small ghost'),
+        button('Delete', () => {
+          if (confirm(`Delete playlist "${pl.name}"? Saved tracks in your library are not affected.`)) {
+            Store.deletePlaylist(pl.id); renderPlaylists();
+          }
+        }, 'btn small danger')
+      );
+      head.append(acts);
+      card.append(head);
+
+      const list = document.createElement('div');
+      list.className = 'track-list';
+      if (!pl.tracks.length) list.append(emptyNote('Empty. Use "Add to playlist" on any track.'));
+      pl.tracks.forEach(track => list.append(trackRow(track, {
+        list: pl.tracks,
+        removable: () => { Store.removeFromPlaylist(pl.id, track.id); renderPlaylists(); }
+      })));
+      card.append(list);
+      c.append(card);
+    });
+  }
+
+  $('createPlaylistBtn').addEventListener('click', () => {
+    const input = $('newPlaylistName');
+    if (!input.value.trim()) return;
+    Store.createPlaylist(input.value);
+    input.value = '';
+    renderPlaylists();
+  });
+
+  // ---------- Playlist picker ----------
+  function openPicker(track) {
+    state.pickerTrack = track;
+    const list = $('pickerList');
+    list.replaceChildren();
+    const pls = Store.getPlaylists();
+    if (!pls.length) list.append(emptyNote('Create a playlist first in the Playlists tab.'));
+    pls.forEach(pl => {
+      list.append(button(`${pl.name} (${pl.tracks.length})`, () => {
+        Store.addToPlaylist(pl.id, track);
+        $('pickerDialog').classList.add('hidden');
+        refreshCurrent();
+      }, 'btn ghost'));
+    });
+    $('pickerDialog').classList.remove('hidden');
+  }
+  $('pickerClose').addEventListener('click', () => $('pickerDialog').classList.add('hidden'));
+
+  // ---------- Queue ----------
+  function saveQueue() {
+    Store.setQueue(state.queue);
+    $('queueCount').textContent = state.queue.length;
+  }
+
+  function addToQueue(track, silent) {
+    if (!track || !track.id) return;
+    state.queue.push(track);
+    saveQueue();
+    if (!silent) flashStatus(`Added "${track.title}" to the queue.`);
+    if (state.currentIndex === -1 && !state.currentTrack) playQueueIndex(0);
+  }
+
+  function playFromList(list, track) {
+    const start = list.findIndex(t => t.id === track.id);
+    state.queue = list.slice(Math.max(start, 0)).map(t => ({ ...t }));
+    saveQueue();
+    playQueueIndex(0);
+  }
+
+  // Move a queue item from index i to index j, keeping the current track pointer correct
+  function moveQueue(i, j) {
+    if (j < 0 || j >= state.queue.length) return;
+    const [item] = state.queue.splice(i, 1);
+    state.queue.splice(j, 0, item);
+    const c = state.currentIndex;
+    if (c === i) state.currentIndex = j;
+    else if (i < c && c <= j) state.currentIndex = c - 1;
+    else if (j <= c && c < i) state.currentIndex = c + 1;
+    saveQueue();
+    renderQueue();
+  }
+
+  function renderQueue() {
+    const box = $('queueList');
+    box.replaceChildren();
+    $('queueCount').textContent = state.queue.length;
+    if (!state.queue.length) return box.append(emptyNote('Queue is empty.'));
+    state.queue.forEach((track, i) => {
+      const row = trackRow(track, {
+        list: state.queue,
+        moveable: (dir) => moveQueue(i, i + dir),
+        removable: () => {
+          state.queue.splice(i, 1);
+          if (i < state.currentIndex) state.currentIndex--;
+          else if (i === state.currentIndex) state.currentIndex = -1;
+          saveQueue();
+          renderQueue();
+        }
+      });
+      row.addEventListener('dblclick', () => playQueueIndex(i));
+      box.append(row);
+    });
+  }
+
+  window.addEventListener('deepflow:queue-track', (e) => addToQueue(e.detail, true));
+  window.addEventListener('deepflow:sleep-stop', () => {
+    if (state.playerReady && state.player) state.player.pauseVideo();
+    setPlayingUI(false);
+    flashStatus('Sleep timer finished. Playback paused.');
+    window.dispatchEvent(new Event('deepflow:sleep-ended'));
+  });
+
+  $('clearQueueBtn').addEventListener('click', () => {
+    state.queue = [];
+    state.currentIndex = -1;
+    saveQueue();
+    renderQueue();
+  });
+
+  // ---------- Playback (official YouTube IFrame Player API) ----------
+  function loadYouTubeApi() {
+    if (window.YT && window.YT.Player) return;
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.append(tag);
+  }
+
+  window.onYouTubeIframeAPIReady = function () {
+    state.player = new YT.Player('ytHolder', {
+      width: '200',
+      height: '113',
+      playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+      events: {
+        onReady: () => {
+          state.playerReady = true;
+          applyVolume();
+          if (state.pendingVideoId) {
+            state.player.loadVideoById(state.pendingVideoId);
+            state.pendingVideoId = null;
+          }
+        },
+        onStateChange: onPlayerStateChange,
+        onError: (e) => {
+          const msg = {
+            2: 'Invalid video.',
+            5: 'Player error in this video.',
+            100: 'This video was removed or is private.',
+            101: 'The owner does not allow embedded playback. Skipping.',
+            150: 'The owner does not allow embedded playback. Skipping.',
+            153: 'Player configuration error. Skipping.'
+          }[e.data] || 'Playback error. Skipping.';
+          flashStatus(msg);
+          setTimeout(playNext, 1200);
+        }
+      }
+    });
+  };
+
+  function onPlayerStateChange(e) {
+    // YT.PlayerState: ENDED = 0, PLAYING = 1, PAUSED = 2
+    if (e.data === 0) playNext();
+    if (e.data === 1) setPlayingUI(true);
+    if (e.data === 2) setPlayingUI(false);
+  }
+
+  function playQueueIndex(i) {
+    if (i < 0 || i >= state.queue.length) return;
+    state.currentIndex = i;
+    const track = state.queue[i];
+    state.currentTrack = track;
+    Store.addToHistory(track);
+    showNowPlaying(track);
+    if (state.playerReady) state.player.loadVideoById(track.id);
+    else state.pendingVideoId = track.id;
+    renderQueue();
+    refreshCurrent();
+  }
+
+  function playNext() {
+    if (state.currentIndex + 1 < state.queue.length) playQueueIndex(state.currentIndex + 1);
+    else setPlayingUI(false);
+  }
+
+  function playPrev() {
+    if (state.currentIndex > 0) playQueueIndex(state.currentIndex - 1);
+  }
+
+  function togglePlay() {
+    if (!state.playerReady || !state.currentTrack) return;
+    const st = state.player.getPlayerState();
+    if (st === 1) state.player.pauseVideo();
+    else state.player.playVideo();
+  }
+
+  function setPlayingUI(playing) {
+    NowPlaying.setPlaying(playing);
+    $('playBtn').textContent = playing ? '❚❚' : '▶';
+    $('visualizer').classList.toggle('active', playing);
+  }
+
+  function showNowPlaying(track) {
+    $('npTitle').textContent = track.title;
+    $('npArtist').textContent = track.artist;
+    $('npThumb').src = track.thumbnail || '';
+    NowPlaying.setTrack(track);
+    setPlayingUI(true);
+    updateAlbumBg();
+  }
+
+  function applyVolume() {
+    if (state.playerReady) state.player.setVolume(Number($('volumeSlider').value));
+  }
+
+  $('playBtn').addEventListener('click', togglePlay);
+  $('nextBtn').addEventListener('click', playNext);
+  $('prevBtn').addEventListener('click', playPrev);
+  $('volumeSlider').addEventListener('input', applyVolume);
+
+  // ---------- Status helper ----------
+  let statusTimer = null;
+  function flashStatus(text) {
+    $('searchStatus').textContent = text;
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => {
+      if (state.lastQuery) $('searchStatus').textContent = '';
+    }, 3000);
+  }
+
+  function refreshCurrent() {
+    const active = document.querySelector('.view.active');
+    if (!active) return;
+    if (active.id === 'view-search') renderResults();
+    if (active.id === 'view-library') renderLibrary();
+    if (active.id === 'view-playlists') renderPlaylists();
+    if (active.id === 'view-history') renderHistory();
+    if (active.id === 'view-queue') renderQueue();
+  }
+
+  // ---------- Background (see js/background.js) ----------
+  $('bgFileInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file && !Background.chooseFile(file)) e.target.value = '';
+  });
+
+  $('bgEnabled').addEventListener('change', (e) => Background.setEnabled(e.target.checked));
+
+  // ---------- Settings dialog ----------
+  $('settingsBtn').addEventListener('click', () => {
+    const s = Store.getSettings();
+    $('sizeSelect').value = s.windowSize;
+    $('regionSelect').value = s.popularRegion || 'US';
+    $('albumBgToggle').checked = !!s.albumBg;
+    $('glassToggle').checked = !!s.glass;
+    $('npGlassToggle').checked = !!s.npGlass;
+    $('customAccent').value = s.customAccent || '#22d3ee';
+    $('glassIntensity').value = s.glassIntensity || 12;
+    $('bgEnabled').checked = !!s.bgEnabled;
+    $('settingsDialog').classList.remove('hidden');
+  });
+
+  $('albumBgToggle').addEventListener('change', (e) => {
+    Store.saveSettings({ albumBg: e.target.checked });
+    updateAlbumBg();
+  });
+
+  $('glassToggle').addEventListener('change', (e) => {
+    Store.saveSettings({ glass: e.target.checked });
+    applySettings();
+  });
+
+  $('npGlassToggle').addEventListener('change', (e) => {
+    Store.saveSettings({ npGlass: e.target.checked });
+    applySettings();
+  });
+
+  $('closeSettingsBtn').addEventListener('click', () => {
+    const size = $('sizeSelect').value;
+    Store.saveSettings({
+      windowSize: size,
+      popularRegion: $('regionSelect').value,
+      customAccent: $('customAccent').value,
+      glassIntensity: Number($('glassIntensity').value)
+    });
+    if (window.desktop) {
+      const [w, h] = size.split('x').map(Number);
+      window.desktop.setSize(w, h);
+    }
+    $('settingsDialog').classList.add('hidden');
+    updateQuotaBadge();
+    if (!state.lastQuery) showHome();
+  });
+
+  $('clearCacheBtn').addEventListener('click', () => {
+    Store.clearCache();
+    flashStatus('Search cache cleared.');
+  });
+
+  // ---------- Backup ----------
+  $('exportBtn').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(Store.exportAll(), null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `deepflow-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  $('importBtn').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      Store.importAll(JSON.parse(await file.text()));
+      state.queue = Store.getQueue();
+      saveQueue();
+      flashStatus('Backup imported.');
+      refreshCurrent();
+    } catch (err) {
+      flashStatus('Import failed: ' + err.message);
+    }
+    e.target.value = '';
+  });
+
+  NowPlaying.init({
+    getTime: () => (state.playerReady ? state.player.getCurrentTime() : 0),
+    getDuration: () => (state.playerReady ? state.player.getDuration() : 0),
+    seek: (t) => { if (state.playerReady) state.player.seekTo(t, true); },
+    toggle: togglePlay,
+    next: playNext,
+    prev: playPrev
+  });
+
+  // ---------- Start ----------
+  applySettings();
+  saveQueue();
+  updateQuotaBadge();
+  loadYouTubeApi();
+  renderQueue();
+  Background.init();
+
+  const startSettings = Store.getSettings();
+  if (window.desktop && startSettings.windowSize) {
+    const [w, h] = startSettings.windowSize.split('x').map(Number);
+    window.desktop.setSize(w, h);
+  }
+
+  showHome();
+})();
