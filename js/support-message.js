@@ -5,6 +5,7 @@ const SupportMessage = (() => {
   let completedTracks = 0;
   let nextThreshold = randomThreshold();
   let handlingEnd = false;
+  let finishCurrentSpeech = null;
 
   function randomThreshold() {
     return Math.floor(Math.random() * 3) + 4; // 4, 5, or 6 tracks
@@ -27,8 +28,10 @@ const SupportMessage = (() => {
       const finish = () => {
         if (finished) return;
         finished = true;
+        finishCurrentSpeech = null;
         resolve();
       };
+      finishCurrentSpeech = finish;
 
       utterance.onend = finish;
       utterance.onerror = finish;
@@ -56,5 +59,12 @@ const SupportMessage = (() => {
     }
   }
 
-  return { afterTrackEnds };
+  function cancel() {
+    if (finishCurrentSpeech) {
+      window.speechSynthesis.cancel();
+      finishCurrentSpeech();
+    }
+  }
+
+  return { afterTrackEnds, cancel };
 })();
