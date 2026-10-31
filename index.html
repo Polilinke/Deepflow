@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-accent="cyan">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' data: https://i.ytimg.com https://*.ytimg.com https://*.ggpht.com https://yt3.ggpht.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://lrclib.net; media-src 'self' blob:;" />
+  <title>DeepFlow</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/background.css" />
+</head>
+<body>
+  <!-- Background layers: base colour, album artwork, MP4 video (see js/background.js) -->
+  <div id="baseBg"></div>
+  <div id="albumBg"></div>
+  <video id="bgVideo" class="hidden" muted loop playsinline></video>
+  <div class="hud-grid"></div>
+
+  <!-- SVG filter used by the optional liquid-glass effect -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <filter id="glassWarp">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="2" result="noise" />
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="10" />
+    </filter>
+  </svg>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="reactor"></span>
+      <span class="brand-text">DEEP<small>FLOW</small></span>
+    </div>
+
+    <div class="search-wrap">
+      <input id="searchInput" type="search" placeholder="Search songs, artists, albums… then press Enter" autocomplete="off" />
+      <div id="quotaBadge" class="quota-badge">Quota: —</div>
+    </div>
+
+    <div class="controls-top">
+      <select id="accentSelect" title="Accent colour">
+        <option value="cyan">Cyan</option>
+        <option value="purple">Purple</option>
+        <option value="pink">Pink</option>
+        <option value="green">Green</option>
+        <option value="amber">Amber</option>
+      </select>
+      <button id="themeToggle" class="btn ghost" title="Toggle dark / light">☾ / ☀</button>
+      <button id="fullscreenBtn" class="btn ghost" title="Fullscreen (F11)">⛶</button>
+      <button id="settingsBtn" class="btn ghost" title="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div id="quotaWarning" class="banner hidden"></div>
+
+  <main class="layout">
+    <nav class="sidebar">
+      <button class="nav-btn active" data-view="search">Search</button>
+      <button class="nav-btn" data-view="library">Library</button>
+      <button class="nav-btn" data-view="playlists">Playlists</button>
+      <button class="nav-btn" data-view="history">History</button>
+      <button class="nav-btn" data-view="insights">Insights</button>
+      <button class="nav-btn" data-view="rooms">Listening rooms</button>
+      <button class="nav-btn" data-view="queue">Queue <span id="queueCount" class="count">0</span></button>
+      <div class="sidebar-spacer"></div>
+      <button id="exportBtn" class="nav-btn small">Export backup</button>
+      <button id="importBtn" class="nav-btn small">Import backup</button>
+      <input id="importFile" type="file" accept="application/json" hidden />
+    </nav>
+
+    <section class="content">
+      <div id="view-search" class="view active">
+        <div id="searchStatus" class="status"></div>
+        <div id="results" class="track-list"></div>
+      </div>
+
+      <div id="view-library" class="view">
+        <h2>Saved tracks</h2>
+        <div id="libraryList" class="track-list"></div>
+      </div>
+
+      <div id="view-playlists" class="view">
+        <div class="row-between">
+          <h2>Playlists</h2>
+          <div class="row">
+            <input id="newPlaylistName" type="text" placeholder="New playlist name" />
+            <button id="createPlaylistBtn" class="btn">Create</button>
+          </div>
+        </div>
+        <div id="playlistsContainer"></div>
+      </div>
+
+      <div id="view-history" class="view">
+        <div class="row-between">
+          <h2>History</h2>
+          <button id="clearHistoryBtn" class="btn ghost">Clear history</button>
+        </div>
+        <div id="historyList" class="track-list"></div>
+      </div>
+
+      <div id="view-insights" class="view">
+        <div class="row-between"><h2>Your listening insights</h2><button id="wrappedBtn" class="btn">Generate DeepFlow Wrapped</button></div>
+        <div id="insightsStats" class="insights-grid"></div>
+        <h3 class="subheading">Most played</h3><div id="topTracks" class="track-list"></div>
+        <h3 class="subheading">Recommended from your library</h3><div class="row-end"><button id="smartQueueBtn" class="btn primary">Build a smart queue</button></div><div id="recommendations" class="track-list"></div>
+        <div id="wrappedPanel" class="wrapped-panel hidden"></div>
+      </div>
+
+      <div id="view-rooms" class="view">
+        <h2>Listening rooms</h2>
+        <div class="feature-card"><h3>Listen together</h3><p>Shared playback rooms are planned, but aren't live yet. They need a small real-time server so friends can stay synchronised across devices.</p><p class="hint">Your current playlists and listening history remain private on this device.</p><button class="btn" disabled>Rooms coming soon</button></div>
+      </div>
+
+      <div id="view-queue" class="view">
+        <div class="row-between">
+          <h2>Queue</h2>
+          <button id="clearQueueBtn" class="btn ghost">Clear queue</button>
+        </div>
+        <div id="queueList" class="track-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="player">
+    <div id="npOpen" class="now-playing" role="button" tabindex="0" title="Open now playing">
+      <img id="npThumb" class="np-thumb" alt="" />
+      <div class="np-info">
+        <div id="npTitle" class="np-title">Nothing playing</div>
+        <div id="npArtist" class="np-artist">Search for a track to begin</div>
+      </div>
+    </div>
+
+    <div class="transport">
+      <div class="buttons">
+        <button id="prevBtn" class="btn icon" title="Previous">⏮</button>
+        <button id="playBtn" class="btn icon primary" title="Play / pause">▶</button>
+        <button id="nextBtn" class="btn icon" title="Next">⏭</button>
+      </div>
+      <div class="visualizer" id="visualizer" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <div class="volume">
+      <span>🔊</span>
+      <input id="volumeSlider" type="range" min="0" max="100" value="80" />
+    </div>
+  </footer>
+
+  <!-- Expanded now-playing view -->
+  <div id="npFull" class="np-full hidden" aria-hidden="true">
+    <button id="npClose" class="btn ghost np-close" title="Close (Esc)">⌄ Close</button>
+    <div class="np-full-inner">
+      <div class="np-artwork-wrap">
+        <img id="npFullArt" class="np-full-art" alt="Album artwork" />
+        <div id="npFullTitle" class="np-full-title">Nothing playing</div>
+        <div id="npFullArtist" class="np-full-artist"></div>
+        <div id="npFullAlbum" class="np-full-album"></div>
+        <div class="np-full-progress">
+          <span id="npFullTime">0:00</span>
+          <input id="npFullSeek" type="range" min="0" max="1000" value="0" />
+          <span id="npFullDur">0:00</span>
+        </div>
+        <div class="np-full-controls">
+          <button id="npFullPrev" class="btn icon" title="Previous track">⏮</button>
+          <button id="npFullPlay" class="btn icon primary" title="Play / pause">▶</button>
+          <button id="npFullNext" class="btn icon" title="Next track">⏭</button>
+        </div>
+      </div>
+      <section class="np-lyrics-panel">
+        <div class="np-lyrics-toolbar">
+          <div class="np-lyrics-heading">LYRICS</div>
+          <div class="lyrics-tools">
+            <button id="npLyricOffsetMinus" class="btn ghost small" title="Lyrics earlier">−0.5s</button>
+            <span id="npLyricOffsetValue" class="hint">+0.0s</span>
+            <button id="npLyricOffsetPlus" class="btn ghost small" title="Lyrics later">+0.5s</button>
+            <button id="npLyricsBlack" class="btn ghost np-lyrics-black" aria-pressed="false" title="Toggle black lyric text">A · Black text</button>
+          </div>
+        </div>
+        <div class="np-lyrics-stage">
+          <button id="npLyricPrev" class="btn icon np-lyric-arrow" title="Previous lyric">‹</button>
+          <div class="np-lyrics-center">
+            <div id="npLyricsStatus" class="np-lyrics-status"></div>
+            <div id="npLyrics" class="np-lyrics"></div>
+          </div>
+          <button id="npLyricNext" class="btn icon np-lyric-arrow" title="Next lyric">›</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Hidden holder for the official YouTube embedded player -->
+  <div id="ytHolder"></div>
+
+  <!-- Settings dialog -->
+  <div id="settingsDialog" class="modal hidden">
+    <div class="modal-card">
+      <h3>Settings</h3>
+      <label>Window size
+        <select id="sizeSelect">
+          <option value="1000x680">Compact (1000 × 680)</option>
+          <option value="1280x820">Standard (1280 × 820)</option>
+          <option value="1600x960">Large (1600 × 960)</option>
+          <option value="1920x1080">Full HD (1920 × 1080)</option>
+          <option value="2560x1440">QHD (2560 × 1440)</option>
+          <option value="3840x2160">4K (3840 × 2160)</option>
+        </select>
+      </label>
+      <label>Popular songs region (home page)
+        <select id="regionSelect">
+          <option value="US">United States (English)</option>
+          <option value="GB">United Kingdom (English)</option>
+          <option value="CA">Canada (English)</option>
+          <option value="AU">Australia (English)</option>
+          <option value="IN">India</option>
+        </select>
+      </label>
+      <label class="check-row"><input id="albumBgToggle" type="checkbox" /> Album artwork background</label>
+      <label class="check-row"><input id="glassToggle" type="checkbox" /> Liquid glass — entire app (uses more GPU)</label>
+      <label class="check-row"><input id="npGlassToggle" type="checkbox" /> Liquid glass — Now Playing lyrics only</label>
+      <label>Theme studio — custom accent <input id="customAccent" type="color" value="#22d3ee" /></label>
+      <label>Glass intensity <input id="glassIntensity" type="range" min="0" max="30" value="12" /></label>
+      <p class="hint">DeepFlow AI / JARVIS connection: planned for a future secure server-side integration. Never paste a Gemini key into public browser code.</p>
+      <div class="feature-card"><strong>Audio tools</strong><p class="hint">YouTube's embedded player keeps its audio isolated from browser audio processing. A true equalizer and audio-reactive visualizer need a supported direct audio source. The current visualizer is playback animation, not audio analysis.</p></div>
+      <label>Background video (your own .mp4 file)
+        <input id="bgFileInput" type="file" accept=".mp4,video/mp4" />
+      </label>
+      <label class="check-row"><input id="bgEnabled" type="checkbox" /> Show animated background video</label>
+      <div id="bgStatus" class="hint"></div>
+      <p class="hint">DeepFlow uses a protected shared search service. Search requests are rate-limited to protect the service.</p>
+      <div class="row-end">
+        <button id="clearCacheBtn" class="btn ghost">Clear search cache</button>
+        <button id="closeSettingsBtn" class="btn">Save & close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add-to-playlist picker -->
+  <div id="pickerDialog" class="modal hidden">
+    <div class="modal-card">
+      <h3>Add to playlist</h3>
+      <div id="pickerList" class="picker-list"></div>
+      <div class="row-end">
+        <button id="pickerClose" class="btn ghost">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/store.js"></script>
+  <script src="js/youtube.js"></script>
+  <script src="js/background.js"></script>
+  <script src="js/nowplaying.js"></script>
+  <script src="js/features.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
