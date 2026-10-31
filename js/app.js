@@ -438,7 +438,7 @@
 
   function onPlayerStateChange(e) {
     // YT.PlayerState: ENDED = 0, PLAYING = 1, PAUSED = 2
-    if (e.data === 0) playNext();
+    if (e.data === 0) handleTrackEnded();
     if (e.data === 1) setPlayingUI(true);
     if (e.data === 2) setPlayingUI(false);
   }
@@ -456,7 +456,20 @@
     refreshCurrent();
   }
 
+  async function handleTrackEnded() {
+    const endedIndex = state.currentIndex;
+    if (endedIndex + 1 >= state.queue.length) {
+      setPlayingUI(false);
+      return;
+    }
+
+    await SupportMessage.afterTrackEnds();
+    // If the user pressed Next while the announcement was playing, don't skip again.
+    if (state.currentIndex === endedIndex) playNext();
+  }
+
   function playNext() {
+    SupportMessage.cancel();
     if (state.currentIndex + 1 < state.queue.length) playQueueIndex(state.currentIndex + 1);
     else setPlayingUI(false);
   }
