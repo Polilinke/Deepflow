@@ -51,9 +51,22 @@
   document.querySelectorAll('.nav-btn[data-view]').forEach(btn => {
     btn.addEventListener('click', () => showView(btn.dataset.view));
   });
+  document.querySelectorAll('.library-subnav-btn[data-library-view]').forEach(btn => {
+    btn.addEventListener('click', () => showView(btn.dataset.libraryView));
+  });
 
   function showView(name) {
-    document.querySelectorAll('.nav-btn[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+    const librarySection = ['library', 'playlists', 'queue', 'history'].includes(name);
+    const mobileLayout = document.documentElement.dataset.deviceLayout === 'mobile';
+    document.documentElement.dataset.libraryOpen = mobileLayout && librarySection ? 'true' : 'false';
+
+    document.querySelectorAll('.nav-btn[data-view]').forEach(b => {
+      const activeName = mobileLayout && librarySection ? 'library' : name;
+      b.classList.toggle('active', b.dataset.view === activeName);
+    });
+    document.querySelectorAll('.library-subnav-btn[data-library-view]').forEach(b => {
+      b.classList.toggle('active', b.dataset.libraryView === name);
+    });
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
     if (name === 'library') renderLibrary();
     if (name === 'playlists') renderPlaylists();
