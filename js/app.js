@@ -3,6 +3,8 @@
   const $ = (id) => document.getElementById(id);
   const state = {
     results: [],
+    rawResults: [],
+    isSearch: false,
     queue: Store.getQueue(),
     currentIndex: -1,
     currentTrack: null,
@@ -91,6 +93,19 @@
   }
 
   // ---------- Search (Enter only, cached, quota-aware) ----------
+  const officialOnlyToggle = $('officialOnlyToggle');
+  officialOnlyToggle.checked = localStorage.getItem('deepflow-official-only') !== 'false';
+  officialOnlyToggle.addEventListener('change', () => {
+    localStorage.setItem('deepflow-official-only', String(officialOnlyToggle.checked));
+    renderResults();
+    if (state.isSearch) {
+      const count = state.results.length;
+      $('searchStatus').textContent = officialOnlyToggle.checked
+        ? (count ? `Showing ${count} likely official music result(s).` : 'No likely official upload found. Turn off Official only to see all results.')
+        : `Showing all ${count} search result(s).`;
+    }
+  });
+
   $('searchInput').addEventListener('input', (e) => {
     const q = e.target.value.trim();
     if (!q) {
@@ -118,7 +133,8 @@
     const cacheKey = 'popular:' + region;
     const cached = Store.getCachedSearch(cacheKey);
     if (cached) {
-      state.results = cached;
+      state.rawResults = cached;
+      state.isSearch = false;
       $('searchStatus').textContent = 'Popular music right now';
       renderResults();
       return;
@@ -128,7 +144,8 @@
     try {
       const results = await YouTubeAPI.fetchPopular(region);
       Store.setCachedSearch(cacheKey, results);
-      state.results = results;
+      state.rawResults = results;
+      state.isSearch = false;
       $('searchStatus').textContent = 'Popular music right now';
       renderResults();
     } catch (err) {
@@ -144,9 +161,12 @@
 
     const cached = Store.getCachedSearch(query);
     if (cached) {
-      state.results = cached;
-      $('searchStatus').textContent = `Showing ${cached.length} cached results for "${query}".`;
+      state.rawResults = cached;
+      state.isSearch = true;
       renderResults();
+      $('searchStatus').textContent = officialOnlyToggle.checked
+        ? (state.results.length ? `Showing ${state.results.length} likely official cached result(s) for "${query}".` : 'No likely official upload found. Turn off Official only to see all results.')
+        : `Showing all ${state.results.length} cached results for "${query}".`;
       return;
     }
 
@@ -154,9 +174,12 @@
     try {
       const results = await YouTubeAPI.search(query);
       Store.setCachedSearch(query, results);
-      state.results = results;
-      $('searchStatus').textContent = results.length ? `${results.length} results for "${query}".` : `No results for "${query}".`;
+      state.rawResults = results;
+      state.isSearch = true;
       renderResults();
+      $('searchStatus').textContent = officialOnlyToggle.checked
+        ? (state.results.length ? `Showing ${state.results.length} likely official result(s) for "${query}".` : 'No likely official upload found. Turn off Official only to see all results.')
+        : (results.length ? `Showing all ${results.length} results for "${query}".` : `No results for "${query}".`);
     } catch (err) {
       if (err instanceof YouTubeAPI.QuotaExhaustedError) {
         $('searchStatus').textContent = 'YouTube says the quota is used up. Fresh searches will resume after the daily reset.';
@@ -235,9 +258,38 @@
     return d;
   }
 
+  function officialMatchScore(track, query) {
+    const title = String(track.title || '').toLowerCase();
+    const channel = String(track.artist || '').toLowerCase();
+    const excluded = /\\b(lyrics?|lyric video|cover|karaoke|nightcore|slowed|reverb|sped up|speed up|8d audio|bass boosted|reaction|shorts?|fan edit|非公式)\\b/i;
+    if (excluded.test(title)) return -1;
+
+    let score = 0;
+    if (/\\b(vevo|topic|official|records?|recordings|music|entertainment)\\b/i.test(channel)) score += 4;
+    if (/\\b(vevo|official)\\b/i.test(title)) score += 3;
+    if (/\\b(official audio|official video|music video)\\b/i.test(title)) score += 2;
+    if (channel && title.includes(channel.replace(/\\s*[-–]?\\s*topic$/, '').trim())) score += 2;
+
+    const ignored = new Set(['official', 'audio', 'video', 'music', 'song', 'songs', 'the', 'and', 'for', 'from']);
+    const queryWords = String(query || '').toLowerCase().split(/[^a-z0-9]+/).filter(word => word.length > 2 && !ignored.has(word));
+    if (queryWords.some(word => channel.includes(word))) score += 2;
+    return score;
+  }
+
+  function getOfficialResults() {
+    return state.rawResults
+      .map(track => ({ track, score: officialMatchScore(track, state.lastQuery) }))
+      .filter(item => item.score >= 2)
+      .sort((a, b) => b.score - a.score)
+      .map(item => item.track);
+  }
+
   function renderResults() {
     const box = $('results');
     box.replaceChildren();
+    state.results = state.isSearch && officialOnlyToggle.checked
+      ? getOfficialResults()
+      : state.rawResults.slice();
     state.results.forEach(track => box.append(trackRow(track, { list: state.results })));
   }
 
