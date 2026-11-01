@@ -261,14 +261,14 @@
   function officialMatchScore(track, query) {
     const title = String(track.title || '').toLowerCase();
     const channel = String(track.artist || '').toLowerCase();
-    const excluded = /\\b(lyrics?|lyric video|cover|karaoke|nightcore|slowed|reverb|sped up|speed up|8d audio|bass boosted|reaction|shorts?|fan edit|非公式)\\b/i;
+    const excluded = /\b(lyrics?|lyric video|cover|karaoke|nightcore|slowed|reverb|sped up|speed up|8d audio|bass boosted|reaction|shorts?|fan edit|非公式)\b/i;
     if (excluded.test(title)) return -1;
 
     let score = 0;
-    if (/\\b(vevo|topic|official|records?|recordings|music|entertainment)\\b/i.test(channel)) score += 4;
-    if (/\\b(vevo|official)\\b/i.test(title)) score += 3;
-    if (/\\b(official audio|official video|music video)\\b/i.test(title)) score += 2;
-    if (channel && title.includes(channel.replace(/\\s*[-–]?\\s*topic$/, '').trim())) score += 2;
+    if (/\b(vevo|topic|official|records?|recordings|music|entertainment)\b/i.test(channel)) score += 4;
+    if (/\b(vevo|official)\b/i.test(title)) score += 3;
+    if (/\b(official audio|official video|music video)\b/i.test(title)) score += 2;
+    if (channel && title.includes(channel.replace(/\s*[-–]?\s*topic$/, '').trim())) score += 2;
 
     const ignored = new Set(['official', 'audio', 'video', 'music', 'song', 'songs', 'the', 'and', 'for', 'from']);
     const queryWords = String(query || '').toLowerCase().split(/[^a-z0-9]+/).filter(word => word.length > 2 && !ignored.has(word));
