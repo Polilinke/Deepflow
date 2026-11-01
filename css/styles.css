@@ -698,3 +698,75 @@ html[data-device-layout="mobile"] .track-actions .btn {
     font-size: 12px;
   }
 }
+
+
+/* Mobile Library: one destination with internal Songs / Playlists / Queue / History tabs. */
+.library-subnav { display: none; }
+html[data-device-layout="mobile"] {
+  height: 100%;
+}
+html[data-device-layout="mobile"] body {
+  height: 100dvh;
+  min-height: 100dvh;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+}
+html[data-device-layout="mobile"] .content { grid-row: 2; }
+html[data-device-layout="mobile"] .player {
+  grid-row: 3;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 88px;
+  height: 88px;
+  flex: none;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  border-top: 1px solid var(--panel-border);
+  box-shadow: 0 -8px 24px rgba(0,0,0,.18);
+}
+html[data-device-layout="mobile"] .sidebar { grid-row: 4; }
+html[data-device-layout="mobile"] .sidebar [data-view="playlists"],
+html[data-device-layout="mobile"] .sidebar [data-view="history"],
+html[data-device-layout="mobile"] .sidebar [data-view="queue"] { display: none; }
+html[data-device-layout="mobile"][data-library-open="true"] .library-subnav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  position: sticky;
+  top: -16px;
+  z-index: 3;
+  margin: -16px -12px 16px;
+  padding: 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--panel-border);
+}
+html[data-device-layout="mobile"] .library-subnav-btn {
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  border: 1px solid var(--panel-border);
+  border-radius: 11px;
+  background: var(--panel);
+}
+html[data-device-layout="mobile"] .library-subnav-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), .13);
+}
+html[data-device-layout="mobile"] .sidebar {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 420px) {
+  html[data-device-layout="mobile"] .player {
+    min-height: 82px;
+    height: 82px;
+  }
+  html[data-device-layout="mobile"] .library-subnav-btn {
+    min-height: 44px;
+    font-size: 12px;
+  }
+}
