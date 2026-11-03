@@ -1,10 +1,9 @@
-// All YouTube Data API requests go through the site's serverless function.
+// All YouTube Data API requests go through the site's Netlify serverless function.
 // The API key is never sent to the browser or desktop client.
-// /api/youtube is supported by both Cloudflare Pages Functions and Netlify redirects.
 const YouTubeAPI = (() => {
   class QuotaExhaustedError extends Error {}
   async function request(action, params = {}) {
-    const url = new URL('/api/youtube', window.location.origin);
+    const url = new URL('/.netlify/functions/youtube', window.location.origin);
     url.searchParams.set('action', action);
     Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, String(v)));
     const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
