@@ -116,6 +116,11 @@ const Background = (() => {
     return true;
   }
 
+  function hasSource() {
+    const v = $('bgVideo');
+    return !!(v && (v.getAttribute('src') || v.currentSrc));
+  }
+
   function setEnabled(on) {
     Store.saveSettings({ bgEnabled: !!on });
     applyMode();
@@ -144,5 +149,5 @@ const Background = (() => {
     applyMode();
   }
 
-  return { init, chooseFile, setEnabled, setArt, applyMode };
+  return { init, chooseFile, setEnabled, setArt, applyMode, hasSource };
 })();
