@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' data: https://i.ytimg.com https://*.ytimg.com https://*.ggpht.com https://yt3.ggpht.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://lrclib.net; media-src 'self' blob:;" />
-  <title>DeepFlow</title>
+  <title>Resona</title>
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/background.css" />
 </head>
@@ -26,7 +26,7 @@
   <header class="topbar">
     <div class="brand">
       <span class="reactor"></span>
-      <span class="brand-text">DEEP<small>FLOW</small></span>
+      <span class="brand-text">RESONA</span>
     </div>
 
     <div class="search-wrap">
@@ -35,6 +35,11 @@
     </div>
 
     <div class="controls-top">
+      <label class="fresh-bg-control" for="freshBgToggle" title="Toggle the fresh video background">
+        <span>Fresh background?</span>
+        <input id="freshBgToggle" type="checkbox" aria-label="Fresh background" />
+        <span class="fresh-bg-switch" aria-hidden="true"></span>
+      </label>
       <select id="accentSelect" title="Accent colour">
         <option value="cyan">Cyan</option>
         <option value="purple">Purple</option>
