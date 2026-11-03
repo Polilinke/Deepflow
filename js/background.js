@@ -13,6 +13,7 @@ const Background = (() => {
   let blobUrl = null;
   const DB_NAME = 'deepflow-media';
   const DB_STORE = 'backgrounds';
+  const DEFAULT_BACKGROUND = '/assets/resona-background.mp4';
 
   function openMediaDb() {
     return new Promise((resolve, reject) => {
@@ -121,6 +122,16 @@ const Background = (() => {
     return !!(v && (v.getAttribute('src') || v.currentSrc));
   }
 
+  function useDefaultBackground() {
+    if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null; }
+    loadSource(DEFAULT_BACKGROUND);
+    Store.saveSettings({ bgEnabled: true, bgPath: '' });
+    $('bgEnabled').checked = true;
+    $('freshBgToggle').checked = true;
+    applyMode();
+    setStatus('Using Resona’s built-in background.');
+  }
+
   function setEnabled(on) {
     Store.saveSettings({ bgEnabled: !!on });
     applyMode();
@@ -149,5 +160,5 @@ const Background = (() => {
     applyMode();
   }
 
-  return { init, chooseFile, setEnabled, setArt, applyMode, hasSource };
+  return { init, chooseFile, useDefaultBackground, setEnabled, setArt, applyMode, hasSource };
 })();
