@@ -595,6 +595,18 @@
   }
 
   // ---------- Background (see js/background.js) ----------
+  const backgroundChoice = $('backgroundChoice');
+  const closeBackgroundChoice = () => backgroundChoice.classList.add('hidden');
+  $('chooseAppBackground').addEventListener('click', () => {
+    localStorage.setItem('resona-background-choice', 'app');
+    closeBackgroundChoice();
+    Background.useDefaultBackground();
+  });
+  $('chooseOwnBackground').addEventListener('click', () => {
+    closeBackgroundChoice();
+    $('bgFileInput').click();
+  });
+
   $('bgFileInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -603,11 +615,14 @@
         $('freshBgToggle').checked = false;
         $('bgEnabled').checked = false;
         Background.setEnabled(false);
+        backgroundChoice.classList.remove('hidden');
       } else {
+        localStorage.setItem('resona-background-choice', 'own');
         $('freshBgToggle').checked = true;
         $('bgEnabled').checked = true;
       }
     } else if (!Background.hasSource()) {
+      backgroundChoice.classList.remove('hidden');
       $('freshBgToggle').checked = false;
       $('bgEnabled').checked = false;
       Background.setEnabled(false);
@@ -622,8 +637,7 @@
     const enabled = e.target.checked;
     $('bgEnabled').checked = enabled;
     if (enabled && !Background.hasSource()) {
-      // First use: ask the user to choose the MP4 instead of silently enabling an empty layer.
-      $('bgFileInput').click();
+      backgroundChoice.classList.remove('hidden');
       return;
     }
     Background.setEnabled(enabled);
