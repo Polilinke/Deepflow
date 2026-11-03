@@ -155,7 +155,10 @@ const Background = (() => {
     });
 
     const s = Store.getSettings();
-    if (s.bgPath && window.desktop) loadSource(toFileUrl(s.bgPath));
+    let backgroundChoice = null;
+    try { backgroundChoice = localStorage.getItem('resona-background-choice'); } catch (_) {}
+    if (backgroundChoice === 'app') loadSource(DEFAULT_BACKGROUND);
+    else if (s.bgPath && window.desktop) loadSource(toFileUrl(s.bgPath));
     else loadSavedBackground().catch(err => setStatus('No saved browser video could be restored: ' + err.message));
     applyMode();
   }
