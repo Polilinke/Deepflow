@@ -597,7 +597,21 @@
   // ---------- Background (see js/background.js) ----------
   $('bgFileInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
-    if (file && !Background.chooseFile(file)) e.target.value = '';
+    if (file) {
+      if (!Background.chooseFile(file)) {
+        e.target.value = '';
+        $('freshBgToggle').checked = false;
+        $('bgEnabled').checked = false;
+        Background.setEnabled(false);
+      } else {
+        $('freshBgToggle').checked = true;
+        $('bgEnabled').checked = true;
+      }
+    } else if (!Background.hasSource()) {
+      $('freshBgToggle').checked = false;
+      $('bgEnabled').checked = false;
+      Background.setEnabled(false);
+    }
   });
 
   $('bgEnabled').addEventListener('change', (e) => {
@@ -605,8 +619,14 @@
     $('freshBgToggle').checked = e.target.checked;
   });
   $('freshBgToggle').addEventListener('change', (e) => {
-    Background.setEnabled(e.target.checked);
-    $('bgEnabled').checked = e.target.checked;
+    const enabled = e.target.checked;
+    $('bgEnabled').checked = enabled;
+    if (enabled && !Background.hasSource()) {
+      // First use: ask the user to choose the MP4 instead of silently enabling an empty layer.
+      $('bgFileInput').click();
+      return;
+    }
+    Background.setEnabled(enabled);
   });
 
   // ---------- Settings dialog ----------
