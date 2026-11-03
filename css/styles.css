@@ -830,3 +830,8 @@ html[data-device-layout="mobile"] .sidebar {
 .fresh-bg-control input:checked + .fresh-bg-switch::after { transform: translateX(15px); }
 .fresh-bg-control:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 900px) { .fresh-bg-control span:first-child { display: none; } }
+
+
+/* Resona background onboarding choice */
+#backgroundChoice .device-choice-card { width: min(520px, 100%); }
+#backgroundChoice .device-choice-actions .btn { min-height: 68px; }
