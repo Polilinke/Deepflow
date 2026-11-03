@@ -600,7 +600,14 @@
     if (file && !Background.chooseFile(file)) e.target.value = '';
   });
 
-  $('bgEnabled').addEventListener('change', (e) => Background.setEnabled(e.target.checked));
+  $('bgEnabled').addEventListener('change', (e) => {
+    Background.setEnabled(e.target.checked);
+    $('freshBgToggle').checked = e.target.checked;
+  });
+  $('freshBgToggle').addEventListener('change', (e) => {
+    Background.setEnabled(e.target.checked);
+    $('bgEnabled').checked = e.target.checked;
+  });
 
   // ---------- Settings dialog ----------
   $('settingsBtn').addEventListener('click', () => {
@@ -613,6 +620,7 @@
     $('customAccent').value = s.customAccent || '#22d3ee';
     $('glassIntensity').value = s.glassIntensity || 12;
     $('bgEnabled').checked = !!s.bgEnabled;
+    $('freshBgToggle').checked = !!s.bgEnabled;
     $('settingsDialog').classList.remove('hidden');
   });
 
@@ -696,6 +704,7 @@
   loadYouTubeApi();
   renderQueue();
   Background.init();
+  $('freshBgToggle').checked = !!Store.getSettings().bgEnabled;
 
   const startSettings = Store.getSettings();
   if (window.desktop && startSettings.windowSize) {
